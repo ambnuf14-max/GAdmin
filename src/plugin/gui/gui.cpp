@@ -107,6 +107,7 @@ auto plugin::gui_initializer::set_cursor_mode_hooked(const decltype(set_cursor_m
     int result = hook.call_trampoline(game, mode, immediately_hide);
 
     if ((mode == 2 || mode == 3) && is_cursor_active() && !cursor_state_intercepted) {
+        cursor_active = false;
         cursor_state_intercepted = true;
         game::cursor::set_state(false);
         return result;
@@ -263,7 +264,7 @@ auto plugin::gui_initializer::main_loop() -> void {
 }
 
 auto plugin::gui_initializer::is_cursor_active() const -> bool {
-    return GetCursor() != nullptr;
+    return cursor_active;
 }
 
 auto plugin::gui_initializer::center_cursor() -> void {
@@ -277,8 +278,9 @@ auto plugin::gui_initializer::center_cursor() -> void {
 }
 
 auto plugin::gui_initializer::enable_cursor() -> void {
+    cursor_active = true;
     game::cursor::set_state(true);
-    
+
     if (cursor_last_x == -1 || cursor_last_y == -1)
         return;
 
@@ -291,6 +293,7 @@ auto plugin::gui_initializer::disable_cursor() -> void {
     game::cursor::set_state(false);
     GetCursorPos(&cursor_pos);
 
+    cursor_active = false;
     cursor_last_x = cursor_pos.x;
     cursor_last_y = cursor_pos.y;
 }
