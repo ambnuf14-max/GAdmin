@@ -24,6 +24,7 @@
 #include "plugin/samp/samp.h"
 #include "plugin/server/admins.h"
 #include "plugin/server/binder.h"
+#include "plugin/server/shooting.h"
 #include "plugin/server/spectator.h"
 #include "plugin/server/user.h"
 #include <common/common.h>
@@ -51,6 +52,11 @@ auto plugin::plugin_initializer::on_event(const samp::event_info& event) -> bool
     event.stream->reset_read_pointer();
 
     if (!server::spectator::on_event(event))
+        return false;
+
+    event.stream->reset_read_pointer();
+
+    if (!server::shooting::on_event(event))
         return false;
 
     event.stream->reset_read_pointer();
@@ -310,6 +316,10 @@ auto __stdcall plugin::plugin_initializer::on_unhandled_exception(EXCEPTION_POIN
 }
 
 auto plugin::plugin_initializer::is_connected_to_valid_server() noexcept -> bool {
+#ifdef GADMIN_TEST_ANY_SERVER
+    return true; // Test build: server IP check disabled (enable with -DTEST_ANY_SERVER=ON).
+#endif
+
     static constexpr auto ip_addresses = std::to_array<std::string_view>({ "5.188.224.221",
                                                                            "85.234.65.36" });
 

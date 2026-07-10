@@ -55,6 +55,16 @@
             "_name": "Информация об игроке в /sp",
             "row_order": { "_type": "custom", "_name": "Порядок столбцов" }
         },
+        "spectator_shotlog": {
+            "_type": "subsection",
+            "_name": "Лог стрельбы в /sp",
+            "show_misses": { "_type": "bool", "_name": "Показывать промахи" },
+            "max_count": {
+                "_type": "intrange",
+                "_name": "Максимальное количество строк",
+                "_config": [ 1, 30 ]
+            }
+        },
         "spectator_actions": {
             "_type": "subsection",
             "_name": "Действия в /sp",
@@ -257,6 +267,7 @@
         "tracers": {
             "_type": "subsection",
             "_name": "Трассера",
+            "only_from_spectator": { "_type": "bool", "_name": "Только от наблюдаемого игрока" },
             "seconds_to_hide": {
                 "_type": "intrange",
                 "_name": "Секунды до исчезновения",
@@ -266,7 +277,17 @@
                 "_type": "intrange",
                 "_name": "Максимальное количество трассеров",
                 "_config": [ 1, 255 ]
-            }
+            },
+            "line_thickness": {
+                "_type": "floatrange",
+                "_name": "Толщина линии",
+                "_config": [ 0.5, 8.0 ]
+            },
+            "show_endpoint": { "_type": "bool", "_name": "Отображать точку попадания" },
+            "show_shooter_label": { "_type": "bool", "_name": "Отображать ник и ID стрелка" },
+            "show_weapon_distance_label": { "_type": "bool", "_name": "Отображать оружие и дистанцию" },
+            "hit_color": { "_type": "color", "_name": "Цвет попадания" },
+            "miss_color": { "_type": "color", "_name": "Цвет промаха" }
         },
         "clickwarp": { "_type": "bool", "_name": "ClickWarp" }
     },
@@ -381,6 +402,7 @@
         "_name": "Режим наблюдения",
         "hide_text_draws": { "_type": "bool", "_name": "Скрывать серверные текстдравы" },
         "hide_menu": { "_type": "bool", "_name": "Скрывать серверную панель" },
+        "freeze_on_disconnect": { "_type": "bool", "_name": "Оставлять камеру при выходе игрока" },
         "zoom_camera": {
             "_type": "subsection",
             "_name": "Отдаление камеры на колесо мыши",

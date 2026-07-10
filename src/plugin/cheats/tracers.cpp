@@ -19,84 +19,77 @@
 #include "plugin/cheats/tracers.h"
 #include "plugin/gui/icon.h"
 #include "plugin/gui/notify.h"
-#include "plugin/gui/style.h"
-#include "plugin/samp/events/synchronization.h" // IWYU pragma: keep
+#include "plugin/server/shooting.h"
 #include "plugin/server/spectator.h"
-#include "plugin/game/game.h"
-#include "plugin/plugin.h"
 #include "plugin/server/user.h"
+#include "plugin/game/game.h"
+#include "plugin/game/weapon.h"
+#include "plugin/plugin.h"
 #include "plugin/types/color.h"
+#include <format>
+#include <string>
+#include <utility>
 
 auto plugin::cheats::tracers::hotkey_callback(gui::hotkey&) -> void {
-    current_tracers.clear();
-    gui::notify::send(gui::notification("Трассера удалены", "Трассера на экране успешно удалены!", ICON_INFO));
-}
-
-auto plugin::cheats::tracers::on_bullet_synchronization(const samp::packet<samp::event_id::bullet_synchronization>& synchronization)
-    -> bool
-{
-    auto cheat_configuration = (*configuration)["cheats"]["tracers"];
-
-    if (!cheat_configuration["use"] || !server::user::is_on_alogin())
-        return true;
-
-    if (cheat_configuration["only_from_spectator"] && (!server::spectator::is_active()
-        || synchronization.player_id != server::spectator::id))
-    {
-        return true;
-    }
-
-    if (current_tracers.size() == cheat_configuration["limit"])
-        current_tracers.pop_back();
-
-    current_tracers.push_back({
-        .miss = synchronization.hit_type == 0 || synchronization.hit_type == 3,
-        .origin = synchronization.origin,
-        .target = synchronization.hit,
-        .time = std::chrono::steady_clock::now()
-    });
-
-    return true;
-}
-
-auto plugin::cheats::tracers::on_event(const samp::event_info& event) -> bool {
-    if (event == samp::event_type::incoming_packet && event == samp::event_id::bullet_synchronization)
-        return on_bullet_synchronization(event.create<samp::event_id::bullet_synchronization, samp::event_type::incoming_packet>());
-
-    return true;
+    hidden_before = std::chrono::steady_clock::now();
+    gui::notify::send(gui::notification("Трассера удалены", "Трассера на экране успешно скрыты!", ICON_INFO));
 }
 
 auto plugin::cheats::tracers::render(types::not_null<gui_initializer*>) -> void {
-    if (current_tracers.empty() || game::is_menu_opened())
+    auto cheat_configuration = (*configuration)["cheats"]["tracers"];
+
+    if (!cheat_configuration["use"] || !server::user::is_on_alogin() || game::is_menu_opened())
         return;
 
-    auto cheat_configuration = (*configuration)["cheats"]["tracers"];
+    const auto& records = server::shooting::records();
+
+    if (records.empty())
+        return;
+
+    auto now = std::chrono::steady_clock::now();
     auto time_to_hide = std::chrono::seconds(cheat_configuration["seconds_to_hide"]);
+    bool only_from_spectator = cheat_configuration["only_from_spectator"];
+    bool show_endpoint = cheat_configuration["show_endpoint"];
+    bool show_shooter_label = cheat_configuration["show_shooter_label"];
+    bool show_weapon_distance_label = cheat_configuration["show_weapon_distance_label"];
+    float line_thickness = cheat_configuration["line_thickness"];
+    types::color hit_color = cheat_configuration["hit_color"];
+    types::color miss_color = cheat_configuration["miss_color"];
+
     ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
 
-    for (auto it = current_tracers.begin(); it != current_tracers.end();) {
-        if (std::chrono::steady_clock::now() - it->time >= time_to_hide) {
-            it = current_tracers.erase(it);
+    // Draw a string with a one-pixel black shadow for readability over any background.
+    auto draw_label = [draw_list](float x, float y, ImU32 color, const std::string& text) {
+        draw_list->AddText({ x + 1.0f, y + 1.0f }, IM_COL32_BLACK, text.c_str());
+        draw_list->AddText({ x, y }, color, text.c_str());
+    };
+
+    for (const auto& record : records) {
+        if (now - record.time >= time_to_hide || record.time < hidden_before)
             continue;
-        }
 
-        auto [ origin_screen_x, origin_screen_y, origin_screen_z ] = game::convert_3d_coords_to_screen(it->origin);
-        auto [ target_screen_x, target_screen_y, target_screen_z ] = game::convert_3d_coords_to_screen(it->target);
-
-        if (origin_screen_z <= 0.0f || target_screen_z <= 0.0f) {
-            it++;
+        if (only_from_spectator && (!server::spectator::is_active() || record.shooter_id != server::spectator::id))
             continue;
-        }
 
-        types::color color = (it->miss)
-            ? gui::style::get_current_accent_colors().red
-            : gui::style::get_current_accent_colors().green;
+        auto [ origin_x, origin_y, origin_z ] = game::convert_3d_coords_to_screen(record.origin);
+        auto [ target_x, target_y, target_z ] = game::convert_3d_coords_to_screen(record.hit);
 
-        draw_list->AddLine({ origin_screen_x, origin_screen_y }, { target_screen_x, target_screen_y }, *color, 1);
-        draw_list->AddCircleFilled({ target_screen_x + 1.5f, target_screen_y + 1.5f }, 3, *color, 16);
+        if (origin_z <= 0.0f || target_z <= 0.0f)
+            continue;
 
-        it++;
-    } 
+        types::color color = (record.is_hit) ? hit_color : miss_color;
+
+        draw_list->AddLine({ origin_x, origin_y }, { target_x, target_y }, *color, line_thickness);
+
+        if (show_endpoint)
+            draw_list->AddCircleFilled({ target_x + 1.5f, target_y + 1.5f }, 3, *color, 16);
+
+        if (show_shooter_label && !record.shooter_nickname.empty())
+            draw_label(origin_x, origin_y, *color, std::format("{}[{}]", record.shooter_nickname, record.shooter_id));
+
+        if (show_weapon_distance_label && record.weapon_id <= std::to_underlying(game::weapon::parachute))
+            draw_label(target_x + 6.0f, target_y, *color, std::format("{} {:.0f}m", game::weapon_names[record.weapon_id], record.distance));
+    }
 }
 
 auto plugin::cheats::tracers::register_hotkeys(types::not_null<gui::hotkey_handler*> handler) -> void {

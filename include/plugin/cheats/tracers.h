@@ -22,34 +22,28 @@
 #include "plugin/cheats/base.h"
 #include "plugin/types/simple.h"
 #include <chrono>
-#include <deque>
 
 namespace plugin::cheats {
 
 /// Cheat for bullet tracing functionality.
 ///
-/// Renders all bullets' trajectories and whether they hit the target.
-/// Maximum amount of tracers is limited, and their rendering conditions
-/// can be configured by the user.
+/// Renders all bullets' trajectories and whether they hit the target. The shots are
+/// collected and enriched by the shared `server::shooting` module; this cheat is only
+/// a configurable view over its records (colors, line thickness, endpoint dot, and the
+/// shooter / weapon labels).
 ///
-/// Only functions when the user is authenticated via `/alogin` and the
-/// cheat is enabled in the configuration.
+/// Only functions when the user is authenticated via `/alogin` and the cheat is enabled
+/// in the configuration.
 class tracers final : public basic_cheat {
 private:
-    struct tracer_information final {
-        bool miss;
-        types::vector_3d origin;
-        types::vector_3d target;
-        std::chrono::steady_clock::time_point time;
-    }; // struct tracer_information final
-
     gui::hotkey hotkey;
-    std::deque<tracer_information> current_tracers;
+
+    /// Records captured before this point are hidden (set by the clear hotkey). The shared
+    /// buffer is left intact so the shotlog window is not affected.
+    std::chrono::steady_clock::time_point hidden_before;
 
     auto hotkey_callback(gui::hotkey& hotkey) -> void;
-    auto on_bullet_synchronization(const samp::packet<samp::event_id::bullet_synchronization>& synchronization) -> bool;
 public:
-    auto on_event(const samp::event_info& event) -> bool override;
     auto render(types::not_null<gui_initializer*> child) -> void override;
     auto register_hotkeys(types::not_null<gui::hotkey_handler*> handler) -> void override;
 

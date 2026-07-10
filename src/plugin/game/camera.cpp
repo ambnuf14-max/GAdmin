@@ -69,3 +69,24 @@ auto plugin::game::camera::screen_to_coordinates(float x, float y, float depth)
         depth * inv_matrix._33 + screen_y * inv_matrix._23 + screen_x * inv_matrix._13 + inv_matrix._43
     };
 }
+
+auto plugin::game::camera::take_control_fixed(const types::vector_3d& look_at) noexcept -> void {
+    static constexpr short switch_type_jumpcut = 2;     // eSwitchType::SWITCHTYPE_JUMPCUT.
+    static constexpr int camera_control_script = 2;     // m_nWhoIsInControlOfTheCamera: controlled by the script.
+
+    take_control_no_entity_address(*instance_address, &look_at, switch_type_jumpcut, camera_control_script);
+}
+
+auto plugin::game::camera::set_fixed_position(const types::vector_3d& source) noexcept -> void {
+    static constexpr types::vector_3d up_offset = { 0.0f, 0.0f, 0.0f };
+
+    set_cam_position_for_fixed_mode_address(*instance_address, &source, &up_offset);
+}
+
+auto plugin::game::camera::restore() noexcept -> void {
+    restore_camera_address(*instance_address);
+}
+
+auto plugin::game::camera::set_behind_player() noexcept -> void {
+    set_camera_behind_player_address(*instance_address);
+}

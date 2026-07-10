@@ -47,6 +47,13 @@
             ]
         },
 
+        "spectator_shotlog": {
+            "use": true,
+            "max_count": 8,
+            "show_misses": true,
+            "filter_mode": 0
+        },
+
         "spectator_actions": {
             "use": true,
             "show_corner_buttons": true,
@@ -78,6 +85,10 @@
             "clist_color": true,
             "align": "left",
             "max_count": 5
+        },
+
+        "shooting": {
+            "use": true
         },
 
         "far_chat": {
@@ -169,7 +180,13 @@
             "use": true,
             "only_from_spectator": false,
             "seconds_to_hide": 15,
-            "limit": 15
+            "limit": 15,
+            "line_thickness": 1.0,
+            "show_endpoint": true,
+            "show_shooter_label": false,
+            "show_weapon_distance_label": false,
+            "hit_color": "FF49C46E",
+            "miss_color": "FFD64545"
         },
                 
         "clickwarp": true
@@ -284,6 +301,7 @@
     "spectator_mode": {
         "hide_text_draws": true,
         "hide_menu": true,
+        "freeze_on_disconnect": true,
         "zoom_camera": {
             "use": false,
             "step": 5

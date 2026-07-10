@@ -52,9 +52,8 @@ private:
     int cursor_last_y = -1;
     bool cursor_state_intercepted = false;
 
-    // Whether the plugin's own cursor is active. The source of truth is this flag, not
-    // GetCursor(): GetCursor() reflects whatever the game/SA-MP last set, so it falsely reads
-    // active when SA-MP shows its own cursor — causing a double cursor and camera desync.
+    // Source of truth for our own cursor visibility. Not GetCursor(): that reads active for any
+    // foreign cursor (SA-MP dialog/chat, other scripts), causing double cursor and camera desync.
     bool cursor_active = false;
 
 #ifndef NDEBUG

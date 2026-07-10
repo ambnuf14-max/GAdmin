@@ -49,8 +49,34 @@ private:
     static types::versioned_address_container<signatures::local_player_chat_t> local_player_chat_container;
     static types::versioned_address_container<signatures::get_local_player_ping_t> get_local_player_ping_container;
     static types::versioned_address_container<signatures::get_local_player_color_as_argb> get_local_player_color_container;
+    static types::versioned_address_container<std::uint8_t, types::version_container_option::offsets> spectating_mode_offsets;
     static auto get_local_player() noexcept -> std::uintptr_t;
 public:
+    /// SA:MP spectating modes (`CLocalPlayer::m_spectating.m_nMode`).
+    enum spectating_mode : std::uint8_t {
+        spectating_mode_none = 0,     ///< Not spectating / no active follow.
+        spectating_mode_vehicle = 3,  ///< Camera follows a vehicle.
+        spectating_mode_player = 4,   ///< Camera follows a player.
+        spectating_mode_side = 14,    ///< Side view.
+        spectating_mode_fixed = 15    ///< Fixed camera (does not follow a target).
+    }; // enum spectating_mode
+
+    /// Get the local SA:MP spectating mode (`CLocalPlayer::m_spectating.m_nMode`).
+    ///
+    /// @note   Returns `spectating_mode_none` on SA:MP 0.3-DL (offset unknown there).
+    /// @return Current spectating mode.
+    static auto get_spectating_mode() noexcept -> std::uint8_t;
+
+    /// Set the local SA:MP spectating mode (`CLocalPlayer::m_spectating.m_nMode`).
+    ///
+    /// Switching to `spectating_mode_fixed` detaches the SA:MP spectate camera so it
+    /// stops following the target every frame, while keeping the player in the
+    /// spectating state (so server synchronization is not disturbed).
+    ///
+    /// @note           No-op on SA:MP 0.3-DL (the field offset is unknown there).
+    /// @param mode[in] New spectating mode.
+    static auto set_spectating_mode(std::uint8_t mode) noexcept -> void;
+
     /// Get user's clist color.
     ///
     /// @return User's clist color.

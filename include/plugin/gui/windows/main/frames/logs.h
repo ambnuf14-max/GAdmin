@@ -24,6 +24,7 @@
 #include "plugin/gui/windows/main/initializer.h"
 #include "plugin/gui/windows/main/base/frame.h"
 #include "plugin/gui/windows/main/widgets/submenu.h"
+#include "plugin/gui/windows/main/widgets/shooting_stats.h"
 #include "plugin/samp/events/server_message.h"
 #include "plugin/samp/events/player_death_notification.h"
 #include "plugin/samp/events/server_connect.h"
@@ -95,7 +96,9 @@ private:
 
     ImFont* bold_font = nullptr;
     ImFont* regular_font = nullptr;
-    
+
+    widgets::shooting_stats shooting;
+
     auto on_server_connect(const samp::event<samp::event_id::server_connect>& event) -> bool;
     auto on_server_quit(const samp::event<samp::event_id::server_quit>& event) -> bool;
     auto on_set_player_name(const samp::event<samp::event_id::set_player_name>& event) -> bool;

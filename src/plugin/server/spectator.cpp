@@ -17,6 +17,8 @@
 /// SPDX-License-Identifier: GPL-3.0-only
 
 #include "plugin/server/spectator.h"
+#include "plugin/game/camera.h"
+#include "plugin/game/pad.h"
 #include "plugin/game/ped_model.h"
 #include "plugin/game/vehicle.h"
 #include "plugin/gui/hotkey.h"
@@ -29,8 +31,11 @@
 #include "plugin/samp/utils.h"
 #include "plugin/game/weapon.h"
 #include "plugin/plugin.h"
+#include "plugin/log.h"
 #include "plugin/types/u8regex.h"
 #include "plugin/types/string_iterator.h"
+#include <algorithm>
+#include <cmath>
 
 auto plugin::server::spectator::parse_player_statistics(const std::string& text) -> std::optional<std::array<std::string, 7>> {
     static constexpr std::array<std::string_view, 7> keys = { "Банк:", "Фракция:", "Должность:", "Транспорт:",
@@ -182,6 +187,9 @@ auto plugin::server::spectator::on_show_dialog(const samp::event<samp::event_id:
 }
 
 auto plugin::server::spectator::on_spectating_player(const samp::event<samp::event_id::spectating_player>& player) -> bool {
+    if (frozen)
+        exit_freeze();
+
     if (!active || previous_id == player.id)
         return true;
 
@@ -192,10 +200,25 @@ auto plugin::server::spectator::on_spectating_player(const samp::event<samp::eve
 }
 
 auto plugin::server::spectator::on_spectating_vehicle() -> bool {
+    if (frozen)
+        exit_freeze();
+
     if (!active)
         return true;
 
     request_checking_statistics();
+
+    return true;
+}
+
+auto plugin::server::spectator::on_server_quit(const samp::event<samp::event_id::server_quit>& quit) -> bool {
+    if (frozen || !active || quit.id != id)
+        return true;
+
+    // [spfreeze откат] Фича заморозки камеры наблюдения отключена: mimgui-курсор objmapper
+    // (showCursor) глушит mouse-state spectator-камеры и навсегда её лочит. До выяснения — выкл.
+    // if ((*configuration)["spectator_mode"]["freeze_on_disconnect"])
+    //     enter_freeze();
 
     return true;
 }
@@ -338,8 +361,8 @@ auto plugin::server::spectator::on_bullet_synchronization(const samp::packet<sam
         return true;
 
     information.total_shots++;
-    
-    if (synchronization.hit_type == 0 || synchronization.hit_type == 3)
+
+    if (synchronization.hit_type == 1) // BULLET_HIT_TYPE_PLAYER
         information.hit_shots++;
 
     return true;
@@ -413,6 +436,93 @@ auto plugin::server::spectator::request_checking_statistics() noexcept -> void {
     time_before_check_statistics = std::chrono::steady_clock::now();
 }
 
+auto plugin::server::spectator::enter_freeze() noexcept -> void {
+    if (frozen)
+        return;
+
+    frozen_source = game::camera::get_active_coordinates();
+
+    types::vector_3d direction = game::camera::get_active_point_at() - frozen_source;
+    frozen_yaw = std::atan2(direction.y, direction.x);
+    frozen_pitch = std::atan2(direction.z, std::sqrt(direction.x * direction.x + direction.y * direction.y));
+
+    // Detach only the SA:MP spectate camera (not the player) so it stops following the
+    // target every frame and fighting our fixed freeze camera. Switching to the "fixed"
+    // mode keeps the player in the spectating state, so server synchronization (and the
+    // anti-cheat) is not disturbed, unlike fully disabling spectating.
+    previous_spectating_mode = samp::user::get_spectating_mode();
+    samp::user::set_spectating_mode(samp::user::spectating_mode_fixed);
+
+    frozen = true;
+
+    gui::notify::send(gui::notification("Камера наблюдения",
+                                        "Игрок вышел из сети — камера осталась на месте. "
+                                        "Осмотреться - мышь, выйти - клавиша I.",
+                                        ICON_INFO));
+}
+
+auto plugin::server::spectator::exit_freeze() noexcept -> void {
+    if (!frozen)
+        return;
+
+    frozen = false;
+
+    // Restore the previous spectating mode so SA:MP resumes following the target.
+    samp::user::set_spectating_mode(previous_spectating_mode);
+
+    game::camera::restore();
+    game::camera::set_behind_player();
+}
+
+auto plugin::server::spectator::process_freeze() noexcept -> void {
+    static constexpr float mouse_sensitivity = 0.0025f;
+    static constexpr float pitch_limit = 1.55334f; // ~89 degrees in radians.
+    static constexpr float look_distance = 10.0f;
+
+    if (!user::is_on_alogin()) {
+        exit_freeze();
+        return;
+    }
+
+    bool inputs_active = samp::utils::is_inputs_active();
+    game::pad::mouse_delta delta = game::pad::get_mouse_delta();
+
+#ifndef NDEBUG
+    {
+        using namespace std::chrono_literals;
+        static std::chrono::steady_clock::time_point last_log;
+        auto now = std::chrono::steady_clock::now();
+
+        if (now - last_log >= 250ms) {
+            last_log = now;
+            log::info("[spfreeze] inputs_active={} want_text={} delta=({:.3f}, {:.3f}) yaw/pitch=({:.3f} / {:.3f})",
+                      inputs_active, ImGui::GetIO().WantTextInput, delta.x, delta.y, frozen_yaw, frozen_pitch);
+        }
+    }
+#endif // NDEBUG
+
+    if (!inputs_active) {
+        if (ImGui::IsKeyPressed(ImGuiKey_I, false)) {
+            exit_freeze();
+            return;
+        }
+
+        frozen_yaw -= delta.x * mouse_sensitivity;
+        frozen_pitch = std::clamp(frozen_pitch - delta.y * mouse_sensitivity, -pitch_limit, pitch_limit);
+    }
+
+    float cosine_pitch = std::cos(frozen_pitch);
+    types::vector_3d look_at = {
+        frozen_source.x + std::cos(frozen_yaw) * cosine_pitch * look_distance,
+        frozen_source.y + std::sin(frozen_yaw) * cosine_pitch * look_distance,
+        frozen_source.z + std::sin(frozen_pitch) * look_distance
+    };
+
+    game::camera::set_fixed_position(frozen_source);
+    game::camera::take_control_fixed(look_at);
+    game::pad::disable_player_control();
+}
+
 auto plugin::server::spectator::get_information() noexcept -> spectator_information {
     update_available_information();
     return information;
@@ -433,7 +543,12 @@ auto plugin::server::spectator::on_event(const samp::event_info& event) -> bool 
                 return on_spectating_player(event.create<samp::event_id::spectating_player>());
             else if (event == samp::event_id::spectating_vehicle)
                 return on_spectating_vehicle();
+            else if (event == samp::event_id::server_quit)
+                return on_server_quit(event.create<samp::event_id::server_quit>());
             else if (event == samp::event_id::show_menu) {
+                if (frozen)
+                    exit_freeze();
+
                 active = true;
                 return !(*configuration)["spectator_mode"]["hide_menu"];
             } else if (event == samp::event_id::hide_menu) {
@@ -466,7 +581,17 @@ auto plugin::server::spectator::on_event(const samp::event_info& event) -> bool 
 
             break;
         }
-        
+
+#ifndef NDEBUG
+        case samp::event_type::outgoing_rpc: {
+            if (event == samp::event_id::send_command)
+                return on_debug_send_command(event.create<samp::event_id::send_command,
+                                                          samp::event_type::outgoing_rpc>());
+
+            break;
+        }
+#endif // NDEBUG
+
         default:
             break;
     }
@@ -474,8 +599,41 @@ auto plugin::server::spectator::on_event(const samp::event_info& event) -> bool 
     return true;
 }
 
+#ifndef NDEBUG
+auto plugin::server::spectator::on_debug_send_command(
+    const samp::event<samp::event_id::send_command, samp::event_type::outgoing_rpc>& command) -> bool
+{
+    types::string_iterator iterator(command.command, 1);
+    std::string name = iterator.collect([](std::uint8_t c) { return !std::isspace(c); });
+
+    if (name != "spfreeze")
+        return true;
+
+    if (frozen) {
+        exit_freeze();
+        gui::notify::send(gui::notification("Камера наблюдения [debug]",
+                                            "Заморозка камеры снята вручную.", ICON_INFO));
+    } else if (is_active()) {
+        enter_freeze();
+    } else {
+        gui::notify::send(gui::notification("Камера наблюдения [debug]",
+                                            "Команда /spfreeze работает только во время слежки (/sp).",
+                                            ICON_INFO));
+    }
+
+    return false;
+}
+#endif // NDEBUG
+
 auto plugin::server::spectator::main_loop() -> void {
     using namespace std::chrono_literals;
+
+    // [spfreeze откат] Заморозка камеры отключена (см. on_server_quit). Даже если frozen как-то
+    // выставлен — не обрабатываем, чтобы не лочить spectator-камеру конфликтом с курсором objmapper.
+    // if (frozen) {
+    //     process_freeze();
+    //     return;
+    // }
 
     if (!user::is_on_alogin() || !active)
         return;

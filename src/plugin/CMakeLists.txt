@@ -56,3 +56,11 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     SERVER_NAME_TAGS_DISTANCE=${SERVER_NAME_TAGS_DISTANCE}
     PROJECT_COPYRIGHT_YEARS="${PROJECT_COPYRIGHT_YEARS}"
 )
+
+# Test-only: disable the hardcoded server IP check so the plugin runs on any server.
+# Keep OFF for release builds. Enable with `-DTEST_ANY_SERVER=ON`.
+option(TEST_ANY_SERVER "Disable the server IP check for testing on other servers" OFF)
+if (TEST_ANY_SERVER)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE GADMIN_TEST_ANY_SERVER)
+    message(STATUS "TEST_ANY_SERVER is ON: server IP check is DISABLED (test build).")
+endif()

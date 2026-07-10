@@ -30,6 +30,8 @@
 #include "plugin/samp/events/dialog.h"
 #include "plugin/samp/events/3d_text.h"
 #include "plugin/samp/events/text_draw.h"
+#include "plugin/samp/events/server_quit.h"
+#include "plugin/samp/events/send_command.h"
 #include "plugin/samp/events/event.h"
 #include <optional>
 #include <array>
@@ -77,6 +79,12 @@ private:
     static inline bool can_render_interface = true;
     static inline bool checking_statistics = false;
 
+    static inline bool frozen = false;
+    static inline types::vector_3d frozen_source = { 0.0f, 0.0f, 0.0f };
+    static inline float frozen_yaw = 0.0f;
+    static inline float frozen_pitch = 0.0f;
+    static inline std::uint8_t previous_spectating_mode = 0;
+
     static auto parse_player_statistics(const std::string& text) -> std::optional<std::array<std::string, 7>>;
 
     static auto on_show_text_draw(const samp::event<samp::event_id::show_text_draw>& text_draw) -> bool;
@@ -86,6 +94,7 @@ private:
     static auto on_show_dialog(const samp::event<samp::event_id::show_dialog>& dialog) -> bool;
     static auto on_spectating_player(const samp::event<samp::event_id::spectating_player>& player) -> bool;
     static auto on_spectating_vehicle() -> bool;
+    static auto on_server_quit(const samp::event<samp::event_id::server_quit>& quit) -> bool;
     static auto on_player_synchronization(const samp::packet<samp::event_id::player_synchronization>& synchronization) -> bool;
     static auto on_vehicle_synchronization(const samp::packet<samp::event_id::vehicle_synchronization>& synchronization) -> bool;
     static auto on_passenger_synchronization(const samp::packet<samp::event_id::passenger_synchronization>& synchronization) -> bool;
@@ -100,6 +109,24 @@ private:
     static auto assign(std::uint16_t new_id, const std::string_view& new_nickname) noexcept -> void;
     static auto update_spectator_details() noexcept -> void;
     static auto request_checking_statistics() noexcept -> void;
+
+    /// Freeze the camera in place at the last spectated position (called when the
+    /// spectated player disconnects). The camera is held client-side and can be
+    /// rotated with the mouse until released.
+    static auto enter_freeze() noexcept -> void;
+
+    /// Release the frozen camera and restore the default follow camera.
+    static auto exit_freeze() noexcept -> void;
+
+    /// Per-frame handler for the frozen camera (holds the position, applies mouse look).
+    static auto process_freeze() noexcept -> void;
+
+#ifndef NDEBUG
+    /// Debug-only handler for the `/spfreeze` command. Manually toggles the disconnect
+    /// camera freeze on the currently spectated player, so the behaviour can be tested
+    /// without waiting for a real player to leave the server. Excluded from release builds.
+    static auto on_debug_send_command(const samp::event<samp::event_id::send_command, samp::event_type::outgoing_rpc>& command) -> bool;
+#endif // NDEBUG
 public:
     /// Camera switch states.
     enum class camera_switch_state_t : std::uint8_t {
@@ -171,6 +198,11 @@ public:
     /// @return True if interface elements can be rendered.
     static inline auto can_render() noexcept -> bool;
 
+    /// Check if the camera is currently frozen in place after a spectated player disconnected.
+    ///
+    /// @return True if the camera is frozen.
+    static inline auto is_frozen() noexcept -> bool;
+
     /// Retrieve the spectator's current information.
     ///
     /// @return Spectator's information.
@@ -211,6 +243,10 @@ inline auto plugin::server::spectator::is_active() noexcept -> bool {
 
 inline auto plugin::server::spectator::can_render() noexcept -> bool {
     return is_active() && can_render_interface;
+}
+
+inline auto plugin::server::spectator::is_frozen() noexcept -> bool {
+    return frozen;
 }
     
 template<plugin::server::spectator::menu_option option>

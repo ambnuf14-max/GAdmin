@@ -17,6 +17,30 @@
 /// SPDX-License-Identifier: GPL-3.0-only
 
 #include "plugin/samp/events/synchronization.h"
+#include "plugin/log.h"
+#include <algorithm>
+#include <cstdint>
+#include <format>
+#include <string>
+
+namespace {
+
+/// Temporary diagnostic: dump the raw bytes and read offset of a bullet stream so the
+/// exact packet layout (and our read alignment) can be verified from gadmin.log.
+auto dump_bullet_stream(plugin::types::zstring_t tag, plugin::samp::bit_stream* stream) -> void {
+    int total_bytes = stream->get_number_of_bytes_used();
+    int read_offset_bits = stream->get_read_offset();
+    const auto* data = reinterpret_cast<const unsigned char*>(stream->get_data_ptr());
+
+    std::string hex;
+
+    for (int i = 0, count = std::min(total_bytes, 48); i < count; i++)
+        hex += std::format("{:02X} ", data[i]);
+
+    plugin::log::info("[shotdbg] {} raw: bytes={} read_offset_bits={} data=[ {}]", tag, total_bytes, read_offset_bits, hex);
+}
+
+} // namespace
 
 plugin::samp::common_synchronization_info::common_synchronization_info(bit_stream* stream, int skip_bytes, bool check_keys) {
     stream->ignore_bytes(0x1);
@@ -41,5 +65,18 @@ plugin::samp::common_synchronization_info::common_synchronization_info(bit_strea
 }
 
 plugin::samp::event<plugin::samp::event_id::bullet_synchronization, plugin::samp::event_type::incoming_packet>::event(bit_stream* stream) {
+    dump_bullet_stream("incoming bullet", stream);
     stream->read_into(player_id, hit_type, hit_id, origin, hit, offset, weapon_id);
+    log::info("[shotdbg] incoming parsed: player={} hit_type={} hit_id={} weapon={} origin=({:.1f},{:.1f},{:.1f}) hit=({:.1f},{:.1f},{:.1f}) offset=({:.2f},{:.2f},{:.2f})",
+              player_id, hit_type, hit_id, weapon_id, origin.x, origin.y, origin.z, hit.x, hit.y, hit.z, offset.x, offset.y, offset.z);
+}
+
+plugin::samp::event<plugin::samp::event_id::bullet_synchronization, plugin::samp::event_type::outgoing_packet>::event(bit_stream* stream) {
+    // Layout: [packet id][hit_type][hit_id][origin][hit][offset][weapon_id]. No `player_id`
+    // for outgoing bullets (the server knows the sender). Skip the leading packet id byte.
+    dump_bullet_stream("outgoing bullet", stream);
+    stream->ignore_bytes(0x1);
+    stream->read_into(hit_type, hit_id, origin, hit, offset, weapon_id);
+    log::info("[shotdbg] outgoing parsed: hit_type={} hit_id={} weapon={} origin=({:.1f},{:.1f},{:.1f}) hit=({:.1f},{:.1f},{:.1f}) offset=({:.2f},{:.2f},{:.2f})",
+              hit_type, hit_id, weapon_id, origin.x, origin.y, origin.z, hit.x, hit.y, hit.z, offset.x, offset.y, offset.z);
 }

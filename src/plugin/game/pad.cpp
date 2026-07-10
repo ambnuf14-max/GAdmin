@@ -25,3 +25,8 @@ auto plugin::game::pad::disable_player_control() noexcept -> void {
 auto plugin::game::pad::set_player_enter_vehicle(bool state) noexcept -> void {
     disable_player_enter_vehicle_offset.write(state, *instance);
 }
+
+auto plugin::game::pad::get_mouse_delta() noexcept -> mouse_delta {
+    return { mouse_delta_x_offset.read(*mouse_controller_state),
+             mouse_delta_y_offset.read(*mouse_controller_state) };
+}

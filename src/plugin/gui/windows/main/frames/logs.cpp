@@ -203,6 +203,11 @@ auto plugin::gui::windows::main::frames::logs::handle_message_controls(const std
 auto plugin::gui::windows::main::frames::logs::frame_renderer(std::string& label, std::any& payload) -> void {
     gui::widgets::text(bold_font, title_font_size, 0, "{}", label);
 
+    if (std::any_cast<widgets::shooting_stats::entry_tag>(&payload) != nullptr) {
+        shooting.render();
+        return;
+    }
+
     log_group& group = log_groups[std::any_cast<log_type_t>(payload)];
     float region_avail_x = ImGui::GetContentRegionAvail().x;
     float clear_button_height = ImGui::GetFrameHeight();
@@ -277,4 +282,6 @@ plugin::gui::windows::main::frames::logs::logs(types::not_null<initializer*> chi
 
     for (const auto& [ type, group ] : log_groups)
         submenu.add_entry(group.title, std::make_any<log_type_t>(type));
+
+    submenu.add_entry("Стрельба", std::make_any<widgets::shooting_stats::entry_tag>(widgets::shooting_stats::entry_tag{}));
 }

@@ -29,14 +29,28 @@ private:
     static inline types::address<std::uintptr_t> instance = 0xB73458;
     static inline types::offset<bool> disable_player_controls_offset = 0x10E;
     static inline types::offset<bool> disable_player_enter_vehicle_offset = 0x119;
+    static inline types::address<float> mouse_controller_state = 0xB73418; // CPad::NewMouseControllerState.
+    static inline types::offset<float> mouse_delta_x_offset = 0xC;
+    static inline types::offset<float> mouse_delta_y_offset = 0x10;
 public:
+    /// Mouse movement delta for the current frame.
+    struct mouse_delta final {
+        float x; ///< Horizontal mouse movement since the last frame.
+        float y; ///< Vertical mouse movement since the last frame.
+    }; // struct mouse_delta final
+
     /// Disable player control.
     static auto disable_player_control() noexcept -> void;
 
     /// Set the player's ability to enter a vehicle.
-    /// 
+    ///
     /// @param state[in] The state to set for player's ability to enter a vehicle.
     static auto set_player_enter_vehicle(bool state) noexcept -> void;
+
+    /// Get the mouse movement delta for the current frame.
+    ///
+    /// @return Mouse movement delta (horizontal and vertical).
+    static auto get_mouse_delta() noexcept -> mouse_delta;
 }; // class pad final
 
 } // namespace plugin::game

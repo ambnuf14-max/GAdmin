@@ -99,6 +99,24 @@ struct event<event_id::bullet_synchronization, event_type::incoming_packet> fina
     explicit event(bit_stream* stream);
 }; // struct event<event_id::bullet_synchronization, event_type::incoming_packet> final
 
+/// The local player's own bullet, sent to the server. Unlike the incoming variant, the
+/// packet carries no `player_id` (the server identifies the sender), so the shooter is the
+/// local SA:MP user.
+template<>
+struct event<event_id::bullet_synchronization, event_type::outgoing_packet> final {
+    std::uint8_t hit_type;   ///< Bullet's hit type.
+    std::uint16_t hit_id;    ///< Bullet's hit of player's ID if present.
+    types::vector_3d origin; ///< Bullet's start coordinates.
+    types::vector_3d hit;    ///< Bullet's end coordinates.
+    types::vector_3d offset; ///< Bullet's offset coordinates.
+    std::uint8_t weapon_id;  ///< Weapon's ID from which the bullet was fired.
+
+    /// Construct an event.
+    ///
+    /// @param bit_stream[in] Bit stream with the event parameters.
+    explicit event(bit_stream* stream);
+}; // struct event<event_id::bullet_synchronization, event_type::outgoing_packet> final
+
 } // namespace plugin::samp
 
 template<>
